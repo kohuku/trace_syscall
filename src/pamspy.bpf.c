@@ -86,14 +86,14 @@ int is_privilege_escalation(u32 pid, struct task_struct *task)
 }
 
 // システムコールの実行前にUID/EUID/SUIDを保存、比較
-static inline int handle_syscall_enter(struct bpf_raw_tracepoint_args *ctx)
+static inline int handle_syscall_enter(struct pt_regs *ctx, u64 syscall_id)
 {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     struct event_t event = {};
 
-    // event.error_flag = is_privilege_escalation(pid,task);
-    event.error_flag = 0;
+    event.error_flag = is_privilege_escalation(pid,task);
+    //event.error_flag = 0;
 
     // 新しいデータを保存 (存在する場合も更新)
     event.uid = BPF_CORE_READ(task, real_cred, uid.val);
@@ -109,10 +109,10 @@ static inline int handle_syscall_enter(struct bpf_raw_tracepoint_args *ctx)
 }
 
 
-static inline int handle_syscall_exit(struct bpf_raw_tracepoint_args *ctx)
+static inline int handle_syscall_exit(struct pt_regs *ctx, u64 syscall_id)
 {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    u64 id = ctx->args[1];
+    u64 id = syscall_id;
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     struct event_t *old_event;
     struct event_t new_event = {};
@@ -134,7 +134,7 @@ static inline int handle_syscall_exit(struct bpf_raw_tracepoint_args *ctx)
     struct event_t *e;
     e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
     if (e) {
-        if(new_event.error_flag){
+        // if(new_event.error_flag){
           e->pid = pid;
           e->uid = old_event->uid;
           e->euid = old_event->euid;
@@ -145,10 +145,10 @@ static inline int handle_syscall_exit(struct bpf_raw_tracepoint_args *ctx)
           e->error_flag = new_event.error_flag;
           e->syscall_no = id;
           bpf_ringbuf_submit(e, 0);
-        }
-        else {
-          bpf_ringbuf_discard(e, 0);
-        }
+        // }
+        // else {
+        //   bpf_ringbuf_discard(e, 0);
+        // }
     }
 
     // 保存したデータを削除
@@ -157,201 +157,200 @@ static inline int handle_syscall_exit(struct bpf_raw_tracepoint_args *ctx)
 };
 
 
-SEC("raw_tracepoint/raw_syscalls/sys_enter")
-int trace_enter_allsyscalls(struct bpf_raw_tracepoint_args *ctx)
+// SEC("raw_tracepoint/raw_syscalls/sys_enter")
+// int trace_enter_allsyscalls(struct bpf_raw_tracepoint_args *ctx)
+// {
+//   return handle_syscall_enter(ctx);
+// }
+
+// SEC("raw_tracepoint/raw_syscalls/sys_exit")
+// int trace_exit_allsyscalls(struct bpf_raw_tracepoint_args *ctx)
+// {
+//   return handle_syscall_exit(ctx);
+// }
+// ioctl システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_ioctl")
+int trace_enter_ioctl(struct pt_regs *ctx)
 {
-  return handle_syscall_enter(ctx);
+    return handle_syscall_enter(ctx, 16);  // ioctl システムコールの処理
+}
+SEC("tracepoint/syscalls/sys_exit_ioctl")
+int trace_exit_ioctl(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx, 16);  // ioctl システムコールの処理
 }
 
-SEC("raw_tracepoint/raw_syscalls/sys_exit")
-int trace_exit_allsyscalls(struct bpf_raw_tracepoint_args *ctx)
+// open システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_open")
+int trace_enter_open(struct pt_regs *ctx)
 {
-  return handle_syscall_exit(ctx);
+    return handle_syscall_enter(ctx,11);  // 共通処理を呼び出す
+}
+
+SEC("tracepoint/syscalls/sys_exit_open")
+int trace_exit_open(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,11);  // 共通処理を呼び出す
+}
+
+// openat システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_openat")
+int trace_enter_openat(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,11);  // 共通処理を呼び出す
+}
+
+SEC("tracepoint/syscalls/sys_exit_openat")
+int trace_exit_openat(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,11);  // 共通処理を呼び出す
+}
+
+// openat2 システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_openat2")
+int trace_enter_openat2(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,11);  // 共通処理を呼び出す
+}
+
+SEC("tracepoint/syscalls/sys_exit_openat2")
+int trace_exit_openat2(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,11);  // 共通処理を呼び出す
 }
 
 
-// // open システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_open")
-// int trace_enter_open(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-
-// SEC("tracepoint/syscalls/sys_exit_open")
-// int trace_exit_open(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
-
-// // openat システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_openat")
-// int trace_enter_openat(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-
-// SEC("tracepoint/syscalls/sys_exit_openat")
-// int trace_exit_openat(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
-
-// // openat2 システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_openat2")
-// int trace_enter_openat2(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-
-// SEC("tracepoint/syscalls/sys_exit_openat2")
-// int trace_exit_openat2(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
+// execve システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_execve")
+int trace_enter_execve(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,110);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_execve")
+int trace_exit_execve(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,110);  // 共通処理を呼び出す
+}
 
 
-// // execve システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_execve")
-// int trace_enter_execve(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_execve")
-// int trace_exit_execve(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
+// setuid システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_setuid")
+int trace_enter_setuid(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,1);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_setuid")
+int trace_exit_setuid(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,1);  // 共通処理を呼び出す
+}
 
 
-// // setuid システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_setuid")
-// int trace_enter_setuid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_setuid")
-// int trace_exit_setuid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
+// setgid システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_setgid")
+int trace_enter_setgid(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,2);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_setgid")
+int trace_exit_setgid(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,2);  // 共通処理を呼び出す
+}
 
+// setreuid システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_setreuid")
+int trace_enter_setreuid(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,3);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_setreuid")
+int trace_exit_setreuid(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,3);  // 共通処理を呼び出す
+}
 
-// // setgid システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_setgid")
-// int trace_enter_setgid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_setgid")
-// int trace_exit_setgid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
+// setregid システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_setregid")
+int trace_enter_setregid(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,4);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_setregid")
+int trace_exit_setregid(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,4);  // 共通処理を呼び出す
+}
 
-// // setreuid システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_setreuid")
-// int trace_enter_setreuid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_setreuid")
-// int trace_exit_setreuid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
+// setresuid システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_setresuid")
+int trace_enter_setresuid(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,5);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_setresuid")
+int trace_exit_setresuid(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,5);  // 共通処理を呼び出す
+}
 
-// // setregid システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_setregid")
-// int trace_enter_setregid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_setregid")
-// int trace_exit_setregid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
+// setresgid システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_setresgid")
+int trace_enter_setresgid(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,6);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_setresgid")
+int trace_exit_setresgid(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,6);  // 共通処理を呼び出す
+}
 
-// // setresuid システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_setresuid")
-// int trace_enter_setresuid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_setresuid")
-// int trace_exit_setresuid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
+// setfsuid システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_setfsuid")
+int trace_enter_setfsuid(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,7);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_setfsuid")
+int trace_exit_setfsuid(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,7);  // 共通処理を呼び出す
+}
 
-// // setresgid システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_setresgid")
-// int trace_enter_setresgid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_setresgid")
-// int trace_exit_setresgid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
+// setfsgid システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_setfsgid")
+int trace_enter_setfsgid(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,8);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_setfsgid")
+int trace_exit_setfsgid(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,8);  // 共通処理を呼び出す
+}
 
-// // setfsuid システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_setfsuid")
-// int trace_enter_setfsuid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_setfsuid")
-// int trace_exit_setfsuid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
+// capset システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_capset")
+int trace_enter_capset(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,9);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_capset")
+int trace_exit_capset(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,9);  // 共通処理を呼び出す
+}
 
-// // setfsgid システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_setfsgid")
-// int trace_enter_setfsgid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_setfsgid")
-// int trace_exit_setfsgid(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
+// prctl システムコールに対する処理
+SEC("tracepoint/syscalls/sys_enter_prctl")
+int trace_enter_prctl(struct pt_regs *ctx)
+{
+    return handle_syscall_enter(ctx,10);  // 共通処理を呼び出す
+}
+SEC("tracepoint/syscalls/sys_exit_prctl")
+int trace_exit_prctl(struct pt_regs *ctx)
+{
+    return handle_syscall_exit(ctx,10);  // 共通処理を呼び出す
+}
 
-// // capset システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_capset")
-// int trace_enter_capset(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_capset")
-// int trace_exit_capset(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
-
-// // prctl システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_prctl")
-// int trace_enter_prctl(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_prctl")
-// int trace_exit_prctl(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }
-
-// // execve システムコールに対する処理
-// SEC("tracepoint/syscalls/sys_enter_execve")
-// int trace_enter_execve(struct pt_regs *ctx)
-// {
-//     return handle_syscall_enter(ctx);  // 共通処理を呼び出す
-// }
-// SEC("tracepoint/syscalls/sys_exit_execve")
-// int trace_exit_execve(struct pt_regs *ctx)
-// {
-//     return handle_syscall_exit(ctx);  // 共通処理を呼び出す
-// }

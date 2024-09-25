@@ -120,15 +120,15 @@ static const struct argp argp = {
  */
 static int handle_event(void *ctx, void *data, size_t data_sz)
 {
-    // event_t* e = (event_t*)data;
-    // if (env.output_path != NULL)
-    // {
-    //     fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
-    // }
-    // else
-    // {
-    //     fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
-    // }
+    event_t* e = (event_t*)data;
+    if (env.output_path != NULL)
+    {
+        fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
+    }
+    else
+    {
+        fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
+    }
     return 0;
 }
 
@@ -280,66 +280,108 @@ int main(int argc, char **argv)
         goto cleanup;
     }
     
-    // // Attach userland probes
-    // skel->links.get_addr_pam_get_authtok = bpf_program__attach_uprobe(
-    //     skel->progs.get_addr_pam_get_authtok,
-	// 	false,           /* uprobe */
-	// 	-1,             /* any pid */
-	// 	env.libpam_path,       /* path to the lib*/
-	// 	offset
+    
+    // // sys_enter の raw_tracepoint にアタッチ
+    // skel->links.trace_enter_allsyscalls = bpf_program__attach_raw_tracepoint(
+    //     skel->progs.trace_enter_allsyscalls,  // プログラム名
+    //     "sys_enter"  // raw_tracepoint 名
     // );
-    // skel->links.trace_enter_allsyscalls = bpf_program__attach_tracepoint(
-    //     skel->progs.trace_enter_allsyscalls,
-	//     "raw_syscalls",                   // カテゴリ名
-    //     "sys_enter"              // tracepoint名
-    //     );
-    // skel->links.trace_exit_allsyscalls = bpf_program__attach_tracepoint(
-    //     skel->progs.trace_exit_allsyscalls,
-    //     "raw_syscalls",                   // カテゴリ名
-    //     "sys_exit"               // tracepoint名
-    //     );
-    // sys_enter の raw_tracepoint にアタッチ
-    skel->links.trace_enter_allsyscalls = bpf_program__attach_raw_tracepoint(
-        skel->progs.trace_enter_allsyscalls,  // プログラム名
-        "sys_enter"  // raw_tracepoint 名
-    );
-    if (!skel->links.trace_enter_allsyscalls) {
-        fprintf(stderr, "Failed to attach raw tracepoint sys_enter\n");
-        return -1;
-    }   
+    // if (!skel->links.trace_enter_allsyscalls) {
+    //     fprintf(stderr, "Failed to attach raw tracepoint sys_enter\n");
+    //     return -1;
+    // }   
 
-    // sys_exit の raw_tracepoint にアタッチ
-    skel->links.trace_exit_allsyscalls = bpf_program__attach_raw_tracepoint(
-        skel->progs.trace_exit_allsyscalls,  // プログラム名
-        "sys_exit"  // raw_tracepoint 名
-    );
-    if (!skel->links.trace_exit_allsyscalls) {
-        fprintf(stderr, "Failed to attach raw tracepoint sys_exit\n");
-        return -1;
-    }
+    // // sys_exit の raw_tracepoint にアタッチ
+    // skel->links.trace_exit_allsyscalls = bpf_program__attach_raw_tracepoint(
+    //     skel->progs.trace_exit_allsyscalls,  // プログラム名
+    //     "sys_exit"  // raw_tracepoint 名
+    // );
+    // if (!skel->links.trace_exit_allsyscalls) {
+    //     fprintf(stderr, "Failed to attach raw tracepoint sys_exit\n");
+    //     return -1;
+    // }
 
-    // skel->links.trace_enter_openat = bpf_program__attach_tracepoint(
-    //     skel->progs.trace_enter_openat,
-	// 	"syscalls",                   // カテゴリ名
-    //     "sys_enter_openat"              // tracepoint名
-    //     );
-    // skel->links.trace_exit_openat = bpf_program__attach_tracepoint(
-    //     skel->progs.trace_exit_openat,
-    //     "syscalls",                   // カテゴリ名
-    //     "sys_exit_openat"               // tracepoint名
-    //     );
+    // execve システムコールに対する設定
+    skel->links.trace_enter_execve = bpf_program__attach_tracepoint(skel->progs.trace_enter_execve, "syscalls", "sys_enter_execve");
+    skel->links.trace_exit_execve = bpf_program__attach_tracepoint(skel->progs.trace_exit_execve, "syscalls", "sys_exit_execve");
+
+    // setuid システムコールに対する設定
+    skel->links.trace_enter_setuid = bpf_program__attach_tracepoint(skel->progs.trace_enter_setuid, "syscalls", "sys_enter_setuid");
+    skel->links.trace_exit_setuid = bpf_program__attach_tracepoint(skel->progs.trace_exit_setuid, "syscalls", "sys_exit_setuid");
+
+    // setgid システムコールに対する設定
+    skel->links.trace_enter_setgid = bpf_program__attach_tracepoint(skel->progs.trace_enter_setgid, "syscalls", "sys_enter_setgid");
+    skel->links.trace_exit_setgid = bpf_program__attach_tracepoint(skel->progs.trace_exit_setgid, "syscalls", "sys_exit_setgid");
+
+    // setreuid システムコールに対する設定
+    skel->links.trace_enter_setreuid = bpf_program__attach_tracepoint(skel->progs.trace_enter_setreuid, "syscalls", "sys_enter_setreuid");
+    skel->links.trace_exit_setreuid = bpf_program__attach_tracepoint(skel->progs.trace_exit_setreuid, "syscalls", "sys_exit_setreuid");
+
+    // setregid システムコールに対する設定
+    skel->links.trace_enter_setregid = bpf_program__attach_tracepoint(skel->progs.trace_enter_setregid, "syscalls", "sys_enter_setregid");
+    skel->links.trace_exit_setregid = bpf_program__attach_tracepoint(skel->progs.trace_exit_setregid, "syscalls", "sys_exit_setregid");
+
+    // setresuid システムコールに対する設定
+    skel->links.trace_enter_setresuid = bpf_program__attach_tracepoint(skel->progs.trace_enter_setresuid, "syscalls", "sys_enter_setresuid");
+    skel->links.trace_exit_setresuid = bpf_program__attach_tracepoint(skel->progs.trace_exit_setresuid, "syscalls", "sys_exit_setresuid");
+
+    // setresgid システムコールに対する設定
+    skel->links.trace_enter_setresgid = bpf_program__attach_tracepoint(skel->progs.trace_enter_setresgid, "syscalls", "sys_enter_setresgid");
+    skel->links.trace_exit_setresgid = bpf_program__attach_tracepoint(skel->progs.trace_exit_setresgid, "syscalls", "sys_exit_setresgid");
+
+    // setfsuid システムコールに対する設定
+    skel->links.trace_enter_setfsuid = bpf_program__attach_tracepoint(skel->progs.trace_enter_setfsuid, "syscalls", "sys_enter_setfsuid");
+    skel->links.trace_exit_setfsuid = bpf_program__attach_tracepoint(skel->progs.trace_exit_setfsuid, "syscalls", "sys_exit_setfsuid");
+
+    // setfsgid システムコールに対する設定
+    skel->links.trace_enter_setfsgid = bpf_program__attach_tracepoint(skel->progs.trace_enter_setfsgid, "syscalls", "sys_enter_setfsgid");
+    skel->links.trace_exit_setfsgid = bpf_program__attach_tracepoint(skel->progs.trace_exit_setfsgid, "syscalls", "sys_exit_setfsgid");
+
+    // capset システムコールに対する設定
+    skel->links.trace_enter_capset = bpf_program__attach_tracepoint(skel->progs.trace_enter_capset, "syscalls", "sys_enter_capset");
+    skel->links.trace_exit_capset = bpf_program__attach_tracepoint(skel->progs.trace_exit_capset, "syscalls", "sys_exit_capset");
+
+    // prctl システムコールに対する設定
+    skel->links.trace_enter_prctl = bpf_program__attach_tracepoint(skel->progs.trace_enter_prctl, "syscalls", "sys_enter_prctl");
+    skel->links.trace_exit_prctl = bpf_program__attach_tracepoint(skel->progs.trace_exit_prctl, "syscalls", "sys_exit_prctl");
+
+    // ioctl
+    skel->links.trace_enter_ioctl = bpf_program__attach_tracepoint(skel->progs.trace_enter_ioctl, "syscalls", "sys_enter_ioctl");
+    skel->links.trace_exit_ioctl = bpf_program__attach_tracepoint(skel->progs.trace_exit_ioctl, "syscalls", "sys_exit_ioctl");
+
+    skel->links.trace_enter_open = bpf_program__attach_tracepoint(
+        skel->progs.trace_enter_open,
+		"syscalls",                   // カテゴリ名
+        "sys_enter_open"              // tracepoint名
+        );
+    skel->links.trace_exit_openat = bpf_program__attach_tracepoint(
+        skel->progs.trace_exit_openat,
+        "syscalls",                   // カテゴリ名
+        "sys_exit_openat"               // tracepoint名
+        );
+
+    skel->links.trace_enter_openat = bpf_program__attach_tracepoint(
+        skel->progs.trace_enter_openat,
+		"syscalls",                   // カテゴリ名
+        "sys_enter_openat"              // tracepoint名
+        );
+    skel->links.trace_exit_openat = bpf_program__attach_tracepoint(
+        skel->progs.trace_exit_openat,
+        "syscalls",                   // カテゴリ名
+        "sys_exit_openat"               // tracepoint名
+        );
 
 
-    // skel->links.trace_enter_openat2 = bpf_program__attach_tracepoint(
-    //     skel->progs.trace_enter_openat2,
-	// 	"syscalls",                   // カテゴリ名
-    //     "sys_enter_openat2"              // tracepoint名
-    //     );
-    // skel->links.trace_exit_openat2 = bpf_program__attach_tracepoint(
-    //     skel->progs.trace_exit_openat2,
-    //     "syscalls",                   // カテゴリ名
-    //     "sys_exit_openat2"               // tracepoint名
-    //     );
+    skel->links.trace_enter_openat2 = bpf_program__attach_tracepoint(
+        skel->progs.trace_enter_openat2,
+		"syscalls",                   // カテゴリ名
+        "sys_enter_openat2"              // tracepoint名
+        );
+    skel->links.trace_exit_openat2 = bpf_program__attach_tracepoint(
+        skel->progs.trace_exit_openat2,
+        "syscalls",                   // カテゴリ名
+        "sys_exit_openat2"               // tracepoint名
+        );
     // Set up ring buffer
     rb = ring_buffer__new(bpf_map__fd( skel->maps.rb), handle_event, NULL, NULL);
     if (!rb) {
