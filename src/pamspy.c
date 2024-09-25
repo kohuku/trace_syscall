@@ -120,15 +120,15 @@ static const struct argp argp = {
  */
 static int handle_event(void *ctx, void *data, size_t data_sz)
 {
-    event_t* e = (event_t*)data;
-    if (env.output_path != NULL)
-    {
-        fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
-    }
-    else
-    {
-        fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
-    }
+    // event_t* e = (event_t*)data;
+    // if (env.output_path != NULL)
+    // {
+    //     fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
+    // }
+    // else
+    // {
+    //     fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
+    // }
     return 0;
 }
 
@@ -288,17 +288,35 @@ int main(int argc, char **argv)
 	// 	env.libpam_path,       /* path to the lib*/
 	// 	offset
     // );
-    skel->links.trace_enter_allsyscalls = bpf_program__attach_tracepoint(
-        skel->progs.trace_enter_allsyscalls,
-	    "raw_syscalls",                   // カテゴリ名
-        "sys_enter"              // tracepoint名
-        );
-    skel->links.trace_exit_allsyscalls = bpf_program__attach_tracepoint(
-        skel->progs.trace_exit_allsyscalls,
-        "raw_syscalls",                   // カテゴリ名
-        "sys_exit"               // tracepoint名
-        );
+    // skel->links.trace_enter_allsyscalls = bpf_program__attach_tracepoint(
+    //     skel->progs.trace_enter_allsyscalls,
+	//     "raw_syscalls",                   // カテゴリ名
+    //     "sys_enter"              // tracepoint名
+    //     );
+    // skel->links.trace_exit_allsyscalls = bpf_program__attach_tracepoint(
+    //     skel->progs.trace_exit_allsyscalls,
+    //     "raw_syscalls",                   // カテゴリ名
+    //     "sys_exit"               // tracepoint名
+    //     );
+    // sys_enter の raw_tracepoint にアタッチ
+    skel->links.trace_enter_allsyscalls = bpf_program__attach_raw_tracepoint(
+        skel->progs.trace_enter_allsyscalls,  // プログラム名
+        "sys_enter"  // raw_tracepoint 名
+    );
+    if (!skel->links.trace_enter_allsyscalls) {
+        fprintf(stderr, "Failed to attach raw tracepoint sys_enter\n");
+        return -1;
+    }   
 
+    // sys_exit の raw_tracepoint にアタッチ
+    skel->links.trace_exit_allsyscalls = bpf_program__attach_raw_tracepoint(
+        skel->progs.trace_exit_allsyscalls,  // プログラム名
+        "sys_exit"  // raw_tracepoint 名
+    );
+    if (!skel->links.trace_exit_allsyscalls) {
+        fprintf(stderr, "Failed to attach raw tracepoint sys_exit\n");
+        return -1;
+    }
 
     // skel->links.trace_enter_openat = bpf_program__attach_tracepoint(
     //     skel->progs.trace_enter_openat,

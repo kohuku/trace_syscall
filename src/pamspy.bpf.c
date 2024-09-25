@@ -86,7 +86,7 @@ int is_privilege_escalation(u32 pid, struct task_struct *task)
 }
 
 // システムコールの実行前にUID/EUID/SUIDを保存、比較
-static inline int handle_syscall_enter(struct pt_regs *ctx)
+static inline int handle_syscall_enter(struct bpf_raw_tracepoint_args *ctx)
 {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -109,10 +109,10 @@ static inline int handle_syscall_enter(struct pt_regs *ctx)
 }
 
 
-static inline int handle_syscall_exit(struct pt_regs *ctx)
+static inline int handle_syscall_exit(struct bpf_raw_tracepoint_args *ctx)
 {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    u64 id = ctx->ax;
+    u64 id = ctx->args[1];
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     struct event_t *old_event;
     struct event_t new_event = {};
@@ -122,7 +122,7 @@ static inline int handle_syscall_exit(struct pt_regs *ctx)
         // 実行前のデータがなければスルー
         return 0;
     }
-    new_event.error_flag = is_privilege_escalation(pid,task);
+    new_event.error_flag = is_privilege_escalation(pid,task) | old_event->error_flag;
 
     // 実行後のUID/EUID/SUIDを取得
     new_event.new_uid = BPF_CORE_READ(task, real_cred, uid.val);
@@ -130,19 +130,25 @@ static inline int handle_syscall_exit(struct pt_regs *ctx)
     new_event.new_suid = BPF_CORE_READ(task, real_cred, suid.val);
     new_event.pid = pid;
     bpf_get_current_comm(&new_event.comm, sizeof(new_event.comm));
+    
     struct event_t *e;
     e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
     if (e) {
-        e->pid = pid;
-        e->uid = old_event->uid;
-        e->euid = old_event->euid;
-        e->suid = old_event->suid;
-        e->new_uid = new_event.new_uid;
-        e->new_euid = new_event.new_euid;
-        e->new_suid = new_event.new_suid;
-        e->error_flag = new_event.error_flag | old_event->error_flag;
-        e->syscall_no = id;
-        bpf_ringbuf_submit(e, 0);
+        if(new_event.error_flag){
+          e->pid = pid;
+          e->uid = old_event->uid;
+          e->euid = old_event->euid;
+          e->suid = old_event->suid;
+          e->new_uid = new_event.new_uid;
+          e->new_euid = new_event.new_euid;
+          e->new_suid = new_event.new_suid;
+          e->error_flag = new_event.error_flag;
+          e->syscall_no = id;
+          bpf_ringbuf_submit(e, 0);
+        }
+        else {
+          bpf_ringbuf_discard(e, 0);
+        }
     }
 
     // 保存したデータを削除
@@ -151,14 +157,14 @@ static inline int handle_syscall_exit(struct pt_regs *ctx)
 };
 
 
-SEC("tracepoint/raw_syscalls/sys_enter")
-int trace_enter_allsyscalls(struct pt_regs *ctx)
+SEC("raw_tracepoint/raw_syscalls/sys_enter")
+int trace_enter_allsyscalls(struct bpf_raw_tracepoint_args *ctx)
 {
   return handle_syscall_enter(ctx);
 }
 
-SEC("tracepoint/raw_syscalls/sys_exit")
-int trace_exit_allsyscalls(struct pt_regs *ctx)
+SEC("raw_tracepoint/raw_syscalls/sys_exit")
+int trace_exit_allsyscalls(struct bpf_raw_tracepoint_args *ctx)
 {
   return handle_syscall_exit(ctx);
 }
