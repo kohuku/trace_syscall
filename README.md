@@ -14,5 +14,5 @@ sudo apt install clang llvm make gcc libelf-dev pkg-config
 
 # HOW TO USE
 ```
-sudo ./pamspy -p $(/usr/sbin/ldconfig -p | grep libpam.so | cut -d ' ' -f4)
+sudo ./bin/pamspy -p $(/usr/sbin/ldconfig -p | grep libpam.so | cut -d ' ' -f4)
 ```
