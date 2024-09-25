@@ -5,7 +5,7 @@
 ## INSTALL PACAGE
 ```
 sudo apt update
-sudo apt install clang llvm make gcc
+sudo apt install clang llvm make gcc libelf-dev pkg-config
 ```
 
 ## BUILD bpftool
