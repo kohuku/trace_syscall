@@ -120,15 +120,15 @@ static const struct argp argp = {
  */
 static int handle_event(void *ctx, void *data, size_t data_sz)
 {
-    // event_t* e = (event_t*)data;
-    // if (env.output_path != NULL)
-    // {
-    //     fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
-    // }
-    // else
-    // {
-    //     fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
-    // }
+    event_t* e = (event_t*)data;
+    if (env.output_path != NULL)
+    {
+        fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
+    }
+    else
+    {
+        fprintf(stderr, "%u,%d,%d,%d,%d,%d,%d,%d,%d\n", e->pid, e->uid, e->euid, e->suid, e->new_uid, e->new_euid, e->new_suid, e->error_flag, e->syscall_no);
+    }
     return 0;
 }
 
